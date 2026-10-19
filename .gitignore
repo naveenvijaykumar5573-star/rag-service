@@ -14,3 +14,6 @@ __pycache__/
 .ipynb_checkpoints/
 .pytest_cache/
 .deepeval/
+
+venv-gpu/
+Untitled.ipynb

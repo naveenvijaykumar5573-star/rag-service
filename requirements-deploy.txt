@@ -1,0 +1,13 @@
+
+fastapi
+uvicorn[standard]
+psycopg2-binary
+pgvector
+pymupdf
+python-dotenv
+python-jose[cryptography]
+python-multipart
+sentence-transformers
+transformers
+torch
+pydantic

@@ -1,14 +1,17 @@
-import os
 
+import os
+from dotenv import load_dotenv
+from jose import jwt, JWTError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import jwt, JWTError
-from dotenv import load_dotenv
 
 load_dotenv()
 
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not configured")
 
 security = HTTPBearer()
 
