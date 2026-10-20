@@ -1,5 +1,6 @@
 from app.database import get_connection
 from app.embeddings import create_embedding
+from pgvector import Vector
 
 def document_belongs_to_tenant(
     document_id: str,
@@ -34,7 +35,7 @@ def retrieve_chunks(
     top_k: int = 3,
     similarity_threshold: float = 0.10
 ):
-    query_embedding = create_embedding(question)
+    query_embedding = Vector(create_embedding(question))
 
     conn = get_connection()
     cursor = conn.cursor()
