@@ -1,108 +1,53 @@
-import time
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 
-MODEL_NAME = "Qwen/Qwen2.5-0.5B-Instruct"
+import os
+import requests
 
-# Select GPU when available; otherwise use CPU
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-print(f"Loading Qwen model on: {DEVICE}")
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-
-model_kwargs = {}
-if DEVICE == "cuda":
-    model_kwargs["torch_dtype"] = torch.float16
-
-llm = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    **model_kwargs
-)
-
-llm = llm.to(DEVICE)
-llm.eval()
-
-print(f"Qwen model loaded successfully on {DEVICE}")
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "openai/gpt-oss-20b"
 
 
-def generate_answer(question: str, context: str):
+def generate_answer(question: str, context: str) -> str:
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is missing")
 
-    prompt = f"""
-You are a document question-answering assistant.
-
-Your task is to answer the user's question using ONLY the information
-contained in the provided context.
-
-Rules:
-1. Do not use outside knowledge.
-2. Do not invent facts.
-3. Do not assume information that is not present in the context.
-4. If the context does not contain enough information to answer the question,
-   respond exactly:
-   "I don't know based on the provided documents."
-5. Keep the answer focused on the question.
-6. Do not add unrelated topics.
-7. When the question asks what a document is about, summarize only the
-   main topics clearly supported by the context.
-
-Context:
-{context}
-
-Question:
-{question}
-
-Answer:
-"""
-
-    messages = [
-        {
-            "role": "user",
-            "content": prompt
-        }
-    ]
-
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
+    response = requests.post(
+        GROQ_API_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": GROQ_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Answer using ONLY the supplied document context. "
+                        "If the answer is absent, say you don't know based "
+                        "on the provided documents."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Document context:\n{context}\n\n"
+                        f"Question: {question}"
+                    ),
+                },
+            ],
+            "max_completion_tokens": 500,
+            "reasoning_effort": "low",
+            "include_reasoning": False,
+        },
+        timeout=60,
     )
 
-    inputs = tokenizer(
-        [text],
-        return_tensors="pt"
-    )
+    response.raise_for_status()
+    data = response.json()
+    answer = data["choices"][0]["message"].get("content")
 
-    # Move input tensors to the same device as the model
-    inputs = {key: value.to(DEVICE) for key, value in inputs.items()}
+    if not answer or not answer.strip():
+        raise RuntimeError("Groq returned an empty answer")
 
-    start_time = time.time()
-
-    with torch.inference_mode():
-        outputs = llm.generate(
-            **inputs,
-            max_new_tokens=100,
-            do_sample=False
-        )
-
-        if DEVICE == "cuda":
-            torch.cuda.synchronize()
-            generated_token_count = (
-                outputs[0].shape[0] - inputs["input_ids"].shape[1]
-            )
-            print(f"Generated tokens: {generated_token_count}")
-    print(
-        f"LLM generation time on {DEVICE}: "
-        f"{time.time() - start_time:.2f} seconds"
-    )
-
-    generated_tokens = outputs[0][
-        inputs["input_ids"].shape[-1]:
-    ]
-
-    answer = tokenizer.decode(
-        generated_tokens,
-        skip_special_tokens=True
-    )
-
-    return answer
+    return answer.strip()
